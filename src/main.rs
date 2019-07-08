@@ -88,5 +88,6 @@ fn main() {
         total += run;
     }
 
-    println!("Run in: {:?}ms", total.as_millis()/(RUNS as u128));
+    let avg = (total.as_micros() as f64) / (1000.0*RUNS as f64);
+    println!("Avg. per run ({:?} runs): {:?}ms", RUNS, avg);
 }
