@@ -8,6 +8,13 @@ Pseudonymisation is a major requirement in recent data protection regulations, a
 * rustc 1.35.0
 * rustc 1.35.0
 
+## Build
+Build with release for optimal results.
+
+```
+cargo build --release
+```
+
 ## Usage
 This project is a tool to measure running times of the proposed P-ID scheme. The tool accepts parameters to setup the number of parties (n) and the threshold value (t).
 
