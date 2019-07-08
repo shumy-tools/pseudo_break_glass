@@ -22,10 +22,10 @@ fn rand_scalar() -> Scalar {
 fn main() {
     const RUNS: usize = 500;
 
-    let matches = App::new("Statisticals for P-ID")
+    let matches = App::new("Statistics for P-ID")
         .version("1.0")
         .author("Micael Pedrosa <micaelpedrosa@ua.pt>")
-        .about("Does awesome things")
+        .about("Performs time measurements for runs of the PID function.")
         .arg(Arg::with_name("parties")
             .help("Sets the number of parties (n)")
             .required(true)
