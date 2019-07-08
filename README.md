@@ -1,9 +1,12 @@
 # pseudo_break_glass
 Pseudonym Identifier Derivation (P-ID) for Break-the-Glass
 
+## Abstract
+Pseudonymisation is a major requirement in recent data protection regulations, and of especial importance when sharing healthcare data outside of the boundaries of the affinity domain. However, healthcare systems require important break-the-glass procedures, such as accessing records of patients in unconscious states. Our work presents a pseudonymisation protocol that is compliant with break-the-glass procedures, established on a (t,n)-threshold secret sharing scheme and public key cryptography. The pseudonym is safely derived from a fragment of public information without any private secret requirement. The protocol is proven secure and scalable under reasonable assumptions.
+
 ## Dependencies
-rustc 1.35.0
-rustc 1.35.0
+* rustc 1.35.0
+* rustc 1.35.0
 
 ## Usage
 This project is a tool to measure running times of the proposed P-ID scheme. The tool accepts parameters to setup the number of parties (n) and the threshold value (t).
