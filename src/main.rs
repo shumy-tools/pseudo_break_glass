@@ -259,19 +259,34 @@ mod tests {
     use shamir::l_i;
 
     #[test]
-    fn attack() {
+    fn share_eq_attack() {
         // Verify that the equality holds:
-        // \sum_{i=1}^{t} y_{i} \cdot (l_{i}^{[t+1]} - l_{i}^{[n]}) = \sum_{t+1}^{n} y_{i} \cdot l_{i}^{[n]} - y_{t+1} \cdot l_{t+1}^{[t+1]}
-        // this can be used to attack t shares.
+        // \sum_{i=1}^{t} y_{i} \cdot (l_{i}^{[t+1]} - l_{i}^{[n]}) = \sum_{i=t+1}^{n} y_{i} \cdot l_{i}^{[n]} - y_{t+1} \cdot l_{t+1}^{[t+1]}
 
         let threshold = 4;
         let parties = 3*threshold + 1;
 
-        let poly = Polynomial::rnd(rnd_scalar(), threshold);
-        let shares = poly.shares(parties);
+        let s = rnd_scalar();
+        let poly = Polynomial::rnd(s, threshold);
+        let mut shares = poly.shares(parties);
 
         let n = shares[0..shares.len()].iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
         let t_1 = shares[0..threshold+1].iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
+
+        //BEGIN attack on shares 0 and 1
+            
+            //TODO: select a random pair and run for N times!
+            //TODO: can I attack individual polynomials?
+            
+            let l0 = l_i(&t_1, 0) - l_i(&n, 0);
+            let l1 = l_i(&t_1, 1) - l_i(&n, 1);
+            
+            // x0.l0 + x1.l1 = 0
+            let x0 = rnd_scalar();
+            let x1 = - x0 * l0 * l1.invert();
+            shares[0].yi += x0;
+            shares[1].yi += x1;
+        //END attack on shares 0 and 1
 
         let mut acc1 = Scalar::zero();
         for i in 0..threshold {
@@ -284,5 +299,11 @@ mod tests {
         }
 
         assert!(acc1 == acc2);
+        assert!(s != Polynomial::reconstruct(&shares));
+        
+        // detect attack
+        let s1 = Polynomial::reconstruct(&shares[0..2*threshold+1]);
+        let s2 = Polynomial::reconstruct(&shares[0..threshold+1]);
+        assert!(s1 != s2);
     }
 }
