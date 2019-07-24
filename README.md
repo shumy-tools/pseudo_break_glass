@@ -16,28 +16,33 @@ cargo build --release
 ```
 
 ## Usage
-This project is a tool to measure running times of the proposed P-ID scheme. The tool accepts parameters to setup the number of parties (n) and the threshold value (t).
+This project is a tool to perform simulations and measurements for the FedPI protocols. The goal is to measure the scalability of the proposed protocols. The measurements do not take into account network latency.
 
 ```
-Statistics for P-ID 1.0
+Statistics for FedPI 1.0
 Micael Pedrosa <micaelpedrosa@ua.pt>
-Performs time measurements for runs of the PID function.
+Simulations and measurements for the FedPI protocol.
 
 USAGE:
-    pseudo-id --parties <parties> --threshold <threshold>
+    pseudo-id --threshold <threshold>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -p, --parties <parties>        Sets the number of parties (n)
-    -t, --threshold <threshold>    Sets the threshold number (t)
+    -t, --threshold <threshold>    Sets the threshold number (t). The number of parties are set automatically to 3t+1.
 ```
 
-with the result output:
+with the result output example:
 
 ```
-Setup: (parties=<n>, threshold=<t>)
-Avg. per run (500 runs): <x>ms
+Setup: (t=32, 3t+1=97)
+---Master key setup stats---
+   Matrix setup (size=294.03125Kb, time=1181.195ms)
+   Commit and encrypt: 247.326ms
+   Share verification: 17810.898ms
+   Total: 19244.28ms
+---Multiparty computation stats (500 runs)---
+   Avg. per run: 7.698006ms
 ```

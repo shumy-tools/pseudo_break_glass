@@ -9,7 +9,7 @@ use core::ops::{Add, Mul, Sub};
 //-----------------------------------------------------------------------------------------------------------
 // Share
 //-----------------------------------------------------------------------------------------------------------
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Share {
     pub i: u32,
     pub yi: Scalar
@@ -78,7 +78,7 @@ impl<'a, 'b> Mul<&'b RistrettoPoint> for &'a Share {
 // RistrettoShare
 //-----------------------------------------------------------------------------------------------------------
 #[allow(non_snake_case)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct RistrettoShare {
     pub i: u32,
     pub Yi: RistrettoPoint
@@ -118,17 +118,13 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoShare {
 //-----------------------------------------------------------------------------------------------------------
 // Shared traits and functions for Polynomial and RistrettoPolynomial
 //-----------------------------------------------------------------------------------------------------------
-fn base_coeficient<F>(size: usize, i: usize, xi: u32, get_xj: F) -> Scalar
-    where F: Fn(usize) -> u32 {
-    
-    let sxi = Scalar::from(xi);
+pub fn l_i(range: &[Scalar], i: usize) -> Scalar {
     let mut num = Scalar::one();
     let mut denum = Scalar::one();
-    for j in 0..size {
+    for j in 0..range.len() {
         if j != i {
-            let xj = Scalar::from(get_xj(j));
-            num *= xj;
-            denum *= xj - sxi;
+            num *= range[j];
+            denum *= range[j] - range[i];
         }
     }
 
@@ -137,7 +133,7 @@ fn base_coeficient<F>(size: usize, i: usize, xi: u32, get_xj: F) -> Scalar
 
 pub trait Reconstruct<S> {
     type Output;
-    fn reconstruct(shares: &[S], k: usize) -> Self::Output;
+    fn reconstruct(shares: &[S]) -> Self::Output;
 }
 
 pub trait Evaluate {
@@ -147,12 +143,25 @@ pub trait Evaluate {
 
 
 //-----------------------------------------------------------------------------------------------------------
-// RistrettoPolynomial
+// Polynomial
 //-----------------------------------------------------------------------------------------------------------
-#[allow(non_snake_case)]
-pub struct RistrettoPolynomial {
+#[derive(Debug)]
+pub struct Polynomial {
     pub k: usize,
-    pub A: Vec<RistrettoPoint>
+    pub a: Vec<Scalar>
+}
+
+define_mul_variants!(LHS = Polynomial, RHS = Scalar, Output = Polynomial);
+define_mul_variants!(LHS = Scalar, RHS = Polynomial, Output = Polynomial);
+define_comut_mul!(LHS = Scalar, RHS = Polynomial, Output = Polynomial);
+impl<'a, 'b> Mul<&'b Scalar> for &'a Polynomial {
+    type Output = Polynomial;
+    fn mul(self, rhs: &'b Scalar) -> Polynomial {
+        Polynomial {
+            k: self.k,
+            a: self.a.iter().map(|ak| ak * rhs).collect::<Vec<Scalar>>()
+        }
+    }
 }
 
 define_mul_variants!(LHS = Polynomial, RHS = RistrettoPoint, Output = RistrettoPolynomial);
@@ -163,37 +172,9 @@ impl<'a, 'b> Mul<&'b RistrettoPoint> for &'a Polynomial {
     fn mul(self, rhs: &'b RistrettoPoint) -> RistrettoPolynomial {
         RistrettoPolynomial {
             k: self.k,
-            A: self.a.iter().map(|ak| ak * rhs).collect::<Vec<RistrettoPoint>>()
+            A: self.a.iter().map(|ak| ak * rhs).collect::<Vec<_>>()
         }
     }
-}
-
-impl RistrettoPolynomial {
-    pub fn verify(&self, share: RistrettoShare) -> bool {
-        let x = Scalar::from(share.i as u64);
-        share.Yi == self.evaluate(x)
-    }
-}
-
-impl Evaluate for RistrettoPolynomial {
-    type Output = RistrettoPoint;
-    
-    fn evaluate(&self, x: Scalar) -> RistrettoPoint {
-        // evaluate using Horner's rule
-        let mut rev = self.A.iter().rev();
-        let head = *rev.next().unwrap();
-            
-        rev.fold(head, |partial, coef| partial * x + coef)
-    }
-}
-
-
-//-----------------------------------------------------------------------------------------------------------
-// Polynomial
-//-----------------------------------------------------------------------------------------------------------
-pub struct Polynomial {
-    pub k: usize,
-    pub a: Vec<Scalar>
 }
 
 impl Polynomial {
@@ -208,7 +189,7 @@ impl Polynomial {
     }
 
     pub fn shares(&self, n: usize) -> Vec<Share> {
-        let mut shares = Vec::<Share>::new();
+        let mut shares = Vec::<Share>::with_capacity(n);
         for j in 1..n + 1 {
             let x = Scalar::from(j as u64);
             let share = Share { i: j as u32, yi: self.evaluate(x) };
@@ -234,41 +215,75 @@ impl Evaluate for Polynomial {
 impl Reconstruct<Share> for Polynomial {
     type Output = Scalar;
     
-    fn reconstruct(shares: &[Share], k: usize) -> Scalar {
-        assert!(shares.len() >= k + 1);
-        let size = shares.len();
+    fn reconstruct(shares: &[Share]) -> Scalar {
+        let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
 
         let mut acc = Scalar::zero();
-        for i in 0..size {
-            let share = &shares[i];
-            let coef = base_coeficient(size, i, share.i, |j| shares[j].i);
-
-            acc += share.yi * coef;
+        for i in 0..shares.len() {
+            acc += l_i(&range, i) * shares[i].yi;
         }
 
         acc
     }
 }
 
-impl Reconstruct<RistrettoShare> for Polynomial {
+
+//-----------------------------------------------------------------------------------------------------------
+// RistrettoPolynomial
+//-----------------------------------------------------------------------------------------------------------
+#[allow(non_snake_case)]
+#[derive(Debug)]
+pub struct RistrettoPolynomial {
+    pub k: usize,
+    pub A: Vec<RistrettoPoint>
+}
+
+define_mul_variants!(LHS = RistrettoPolynomial, RHS = Scalar, Output = RistrettoPolynomial);
+define_mul_variants!(LHS = Scalar, RHS = RistrettoPolynomial, Output = RistrettoPolynomial);
+define_comut_mul!(LHS = Scalar, RHS = RistrettoPolynomial, Output = RistrettoPolynomial);
+impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoPolynomial {
+    type Output = RistrettoPolynomial;
+
+    #[allow(non_snake_case)]
+    fn mul(self, rhs: &'b Scalar) -> RistrettoPolynomial {
+        RistrettoPolynomial {
+            k: self.k,
+            A: self.A.iter().map(|Ak| Ak * rhs).collect::<Vec<_>>()
+        }
+    }
+}
+
+impl RistrettoPolynomial {
+    pub fn verify(&self, share: RistrettoShare) -> bool {
+        let x = Scalar::from(share.i as u64);
+        share.Yi == self.evaluate(x)
+    }
+}
+
+impl Evaluate for RistrettoPolynomial {
+    type Output = RistrettoPoint;
+    
+    fn evaluate(&self, x: Scalar) -> RistrettoPoint {
+        // evaluate using Horner's rule
+        let mut rev = self.A.iter().rev();
+        let head = *rev.next().unwrap();
+            
+        rev.fold(head, |partial, coef| partial * x + coef)
+    }
+}
+
+impl Reconstruct<RistrettoShare> for RistrettoPolynomial {
     type Output = RistrettoPoint;
 
     #[allow(non_snake_case)]
-    fn reconstruct(shares: &[RistrettoShare], k: usize) -> RistrettoPoint {
-        assert!(shares.len() >= k + 1);
-        let size = shares.len();
+    fn reconstruct(shares: &[RistrettoShare]) -> RistrettoPoint {
+        let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
 
-        let mut res = Vec::<RistrettoPoint>::with_capacity(size);
-        for i in 0..size {
-            let share = &shares[i];
-            let coef = base_coeficient(size, i, share.i, |j| shares[j].i);
-            
-            let Li = share.Yi * coef;
-            res.push(Li);
+        let mut acc = RistrettoPoint::default();
+        for i in 0..shares.len() {
+            acc += l_i(&range, i) * shares[i].Yi;
         }
 
-        let mut coefs = res.iter();
-        let head = *coefs.next().unwrap();
-        coefs.fold(head, |acc, coef| acc + coef)
+        acc
     }
 }
