@@ -11,8 +11,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 
 use sha2::{Sha512, Digest};
 use rand::prelude::*;
-
-use shamir::{Reconstruct, Polynomial, RistrettoPolynomial, Share, RistrettoShare};
+use shamir::*;
 
 const RUNS: usize = 100;
 const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
@@ -20,15 +19,6 @@ const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
 fn rnd_scalar() -> Scalar {
     let val = rand::thread_rng().gen::<[u8; 32]>();
     Scalar::hash_from_bytes::<Sha512>(&val)
-}
-
-fn t_1_slice(selected: &Vec<RistrettoShare>, threshold: usize) -> Vec<RistrettoShare> {
-    let mut slice: Vec<RistrettoShare> = vec![];
-    slice.extend(&selected[0..threshold]);
-    slice.extend(&selected[threshold..threshold+1]);
-    assert!(slice.len() == threshold+1);
-    
-    slice
 }
 
 #[allow(non_snake_case)]
@@ -82,12 +72,14 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             assert!(selected.len() == 2*threshold+1);
 
             // derive the fake_Wy point
-            let fake_Wy = RistrettoPolynomial::reconstruct(&selected);
+            let fake_Wy = RistrettoPolynomial::interpolate(&selected);
 
                 // ..detect attack...
-                let slice = t_1_slice(&selected, threshold);
-                let slice_Wy = RistrettoPolynomial::reconstruct(&slice);
-                assert!(fake_Wy != slice_Wy); // fail if the attack is not detected
+                //let slice_Wy = RistrettoPolynomial::interpolate(&selected[0..threshold+1]);
+                //assert!(fake_Wy != slice_Wy); // fail if the attack is not detected
+
+                let poly_Wy = RistrettoPolynomial::reconstruct(&selected);
+                assert!(threshold != poly_Wy.degree());
 
         let run = Instant::now() - start;
         total += run;
@@ -99,11 +91,10 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             ok.extend(&Wy_shares[0..2*threshold+1]);
             ok.shuffle(&mut rng); 
 
-            let Wy = RistrettoPolynomial::reconstruct(&ok);
+            let Wy = RistrettoPolynomial::interpolate(&ok);
 
                 // ..verification...
-                let slice = t_1_slice(&ok, threshold);
-                let slice_Wy = RistrettoPolynomial::reconstruct(&slice);
+                let slice_Wy = RistrettoPolynomial::interpolate(&ok[0..threshold+1]);
                 assert!(Wy == slice_Wy); // should not detect any attack
 
             // confirm the expected result from the original shares
@@ -224,7 +215,7 @@ fn master_key_stats(parties: usize, threshold: usize) {
     total += run;
 
     // confirm the expected result
-    let y_res = Polynomial::reconstruct(&y_j);
+    let y_res = Polynomial::interpolate(&y_j);
     assert!(y == y_res);
 
     println!("   Total: {:?}ms", (total.as_micros() as f64) / 1000.0);
@@ -249,14 +240,35 @@ fn main() {
     let parties = 3 * threshold + 1;
     println!("Setup: (t={}, 3t+1={})", threshold, parties);
 
-    master_key_stats(parties, threshold);
+    //master_key_stats(parties, threshold);
     multiparty_stats(parties, threshold);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shamir::l_i;
+    use shamir::{l_i, Reconstruct};
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn poly_reconstruct() {
+        let threshold = 4;
+        let parties = 3*threshold + 1;
+
+        let s = rnd_scalar();
+
+        let poly = Polynomial::rnd(s, threshold);
+        let S_poly = &poly * G;
+
+        let shares = poly.shares(parties);
+        let S_shares = shares.iter().map(|s| s * G).collect::<Vec<_>>();
+
+        let r_poly = Polynomial::reconstruct(&shares);
+        assert!(poly == r_poly);
+
+        let S_r_poly = RistrettoPolynomial::reconstruct(&S_shares);
+        assert!(S_poly == S_r_poly);
+    }
 
     #[test]
     fn share_eq_attack() {
@@ -299,11 +311,11 @@ mod tests {
         }
 
         assert!(acc1 == acc2);
-        assert!(s != Polynomial::reconstruct(&shares));
+        assert!(s != Polynomial::interpolate(&shares));
         
         // detect attack
-        let s1 = Polynomial::reconstruct(&shares[0..2*threshold+1]);
-        let s2 = Polynomial::reconstruct(&shares[0..threshold+1]);
+        let s1 = Polynomial::interpolate(&shares[0..2*threshold+1]);
+        let s2 = Polynomial::interpolate(&shares[0..threshold+1]);
         assert!(s1 != s2);
     }
 }

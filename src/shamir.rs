@@ -118,6 +118,31 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoShare {
 //-----------------------------------------------------------------------------------------------------------
 // Shared traits and functions for Polynomial and RistrettoPolynomial
 //-----------------------------------------------------------------------------------------------------------
+pub fn mul(a: Vec::<Scalar>, b: Vec::<Scalar>) -> Vec::<Scalar> {
+    let mut res = vec![Scalar::zero(); a.len() + b.len() - 1];
+    for i in 0..a.len() {
+        for j in 0..b.len() {
+            res[i + j] += a[i] * b[j];
+        }
+    }
+
+    res
+}
+
+pub fn l_i_x(range: &[Scalar], i: usize) -> Vec<Scalar> {
+    let mut num = vec![Scalar::one()]; // by default is a polynomial with degree 0 of value 1.
+    let mut denum = Scalar::one();
+    for j in 0..range.len() {
+        if j != i {
+            num = mul(vec![Scalar::from(-range[j]), Scalar::one()], num);
+            denum *= range[i] - range[j];
+        }
+    }
+
+    let denum_inv = denum.invert();
+    num.into_iter().map(|v| v * denum_inv).collect::<Vec<_>>()
+}
+
 pub fn l_i(range: &[Scalar], i: usize) -> Scalar {
     let mut num = Scalar::one();
     let mut denum = Scalar::one();
@@ -131,6 +156,11 @@ pub fn l_i(range: &[Scalar], i: usize) -> Scalar {
     num * denum.invert()
 }
 
+pub trait Interpolate<S> {
+    type Output;
+    fn interpolate(shares: &[S]) -> Self::Output;
+}
+
 pub trait Reconstruct<S> {
     type Output;
     fn reconstruct(shares: &[S]) -> Self::Output;
@@ -141,13 +171,15 @@ pub trait Evaluate {
     fn evaluate(&self, x: Scalar) -> Self::Output;
 }
 
+pub trait Degree {
+    fn degree(&self) -> usize;
+}
 
 //-----------------------------------------------------------------------------------------------------------
 // Polynomial
 //-----------------------------------------------------------------------------------------------------------
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Polynomial {
-    pub k: usize,
     pub a: Vec<Scalar>
 }
 
@@ -158,7 +190,6 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a Polynomial {
     type Output = Polynomial;
     fn mul(self, rhs: &'b Scalar) -> Polynomial {
         Polynomial {
-            k: self.k,
             a: self.a.iter().map(|ak| ak * rhs).collect::<Vec<Scalar>>()
         }
     }
@@ -171,7 +202,6 @@ impl<'a, 'b> Mul<&'b RistrettoPoint> for &'a Polynomial {
     type Output = RistrettoPolynomial;
     fn mul(self, rhs: &'b RistrettoPoint) -> RistrettoPolynomial {
         RistrettoPolynomial {
-            k: self.k,
             A: self.a.iter().map(|ak| ak * rhs).collect::<Vec<_>>()
         }
     }
@@ -185,7 +215,7 @@ impl Polynomial {
         let rnd_coefs: Vec<Scalar> = (0..degree).map(|_| Scalar::random(&mut csprng)).collect();
         coefs.extend(rnd_coefs);
         
-        Polynomial { k: degree, a: coefs }
+        Polynomial { a: coefs }
     }
 
     pub fn shares(&self, n: usize) -> Vec<Share> {
@@ -212,10 +242,10 @@ impl Evaluate for Polynomial {
     }
 }
 
-impl Reconstruct<Share> for Polynomial {
+impl Interpolate<Share> for Polynomial {
     type Output = Scalar;
     
-    fn reconstruct(shares: &[Share]) -> Scalar {
+    fn interpolate(shares: &[Share]) -> Scalar {
         let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
 
         let mut acc = Scalar::zero();
@@ -227,14 +257,46 @@ impl Reconstruct<Share> for Polynomial {
     }
 }
 
+impl Reconstruct<Share> for Polynomial {
+    type Output = Polynomial;
+
+    fn reconstruct(shares: &[Share]) -> Polynomial {
+        let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
+
+        let mut acc = vec![Scalar::zero(); shares.len()];
+        for i in 0..shares.len() {
+            let lix = l_i_x(&range, i);
+            for j in 0..lix.len() {
+                acc[j] += lix[j] * shares[i].yi;
+            }
+        }
+
+        // reduce if there are zeros at the tail!
+        loop {
+            match acc.last() {
+                Some(v) => if *v != Scalar::zero() { break },
+                None    => break,
+            }
+
+            acc.pop();
+        }
+
+        Polynomial { a: acc }
+    }
+}
+
+impl Degree for Polynomial {
+    fn degree(&self) -> usize {
+        self.a.len() - 1
+    }
+}
 
 //-----------------------------------------------------------------------------------------------------------
 // RistrettoPolynomial
 //-----------------------------------------------------------------------------------------------------------
 #[allow(non_snake_case)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RistrettoPolynomial {
-    pub k: usize,
     pub A: Vec<RistrettoPoint>
 }
 
@@ -247,7 +309,6 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoPolynomial {
     #[allow(non_snake_case)]
     fn mul(self, rhs: &'b Scalar) -> RistrettoPolynomial {
         RistrettoPolynomial {
-            k: self.k,
             A: self.A.iter().map(|Ak| Ak * rhs).collect::<Vec<_>>()
         }
     }
@@ -272,11 +333,11 @@ impl Evaluate for RistrettoPolynomial {
     }
 }
 
-impl Reconstruct<RistrettoShare> for RistrettoPolynomial {
+impl Interpolate<RistrettoShare> for RistrettoPolynomial {
     type Output = RistrettoPoint;
 
     #[allow(non_snake_case)]
-    fn reconstruct(shares: &[RistrettoShare]) -> RistrettoPoint {
+    fn interpolate(shares: &[RistrettoShare]) -> RistrettoPoint {
         let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
 
         let mut acc = RistrettoPoint::default();
@@ -285,5 +346,40 @@ impl Reconstruct<RistrettoShare> for RistrettoPolynomial {
         }
 
         acc
+    }
+}
+
+impl Reconstruct<RistrettoShare> for RistrettoPolynomial {
+    type Output = RistrettoPolynomial;
+
+    #[allow(non_snake_case)]
+    fn reconstruct(shares: &[RistrettoShare]) -> RistrettoPolynomial {
+        let range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
+
+        let mut acc = vec![RistrettoPoint::default(); shares.len()];
+        for i in 0..shares.len() {
+            let lix = l_i_x(&range, i);
+            for j in 0..lix.len() {
+                acc[j] += lix[j] * shares[i].Yi;
+            }
+        }
+
+        // reduce if there are zeros at the tail!
+        loop {
+            match acc.last() {
+                Some(v) => if *v != RistrettoPoint::default() { break },
+                None    => break,
+            }
+
+            acc.pop();
+        }
+
+        RistrettoPolynomial { A: acc }
+    }
+}
+
+impl Degree for RistrettoPolynomial {
+    fn degree(&self) -> usize {
+        self.A.len() - 1
     }
 }
