@@ -16,11 +16,6 @@ use shamir::*;
 const RUNS: usize = 100;
 const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
 
-fn rnd_scalar() -> Scalar {
-    let val = rand::thread_rng().gen::<[u8; 32]>();
-    Scalar::hash_from_bytes::<Sha512>(&val)
-}
-
 #[allow(non_snake_case)]
 fn multiparty_stats(parties: usize, threshold: usize) {
     println!("---Multiparty computation stats ({:?} runs)---", RUNS);
@@ -36,6 +31,7 @@ fn multiparty_stats(parties: usize, threshold: usize) {
         // derive Pc from a fragment of public information
         let public_x = rand::thread_rng().gen::<[u8; 32]>();
         let Pc = RistrettoPoint::hash_from_bytes::<Sha512>(&public_x);
+        let original_PI = y * Pc;
         
         // derive Pc + R = W and Yr
         let r = rnd_scalar();
@@ -72,14 +68,12 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             assert!(selected.len() == 2*threshold+1);
 
             // derive the fake_Wy point
-            let fake_Wy = RistrettoPolynomial::interpolate(&selected);
+            let fake_PI = RistrettoPolynomial::interpolate(&selected) - Yr;
+            assert!(original_PI != fake_PI);
 
                 // ..detect attack...
-                //let slice_Wy = RistrettoPolynomial::interpolate(&selected[0..threshold+1]);
-                //assert!(fake_Wy != slice_Wy); // fail if the attack is not detected
-
-                let poly_Wy = RistrettoPolynomial::reconstruct(&selected);
-                assert!(threshold != poly_Wy.degree());
+                let fake_Wy_x = RistrettoPolynomial::reconstruct(&selected[0..2*threshold+1]);
+                assert!(threshold != fake_Wy_x.degree());
 
         let run = Instant::now() - start;
         total += run;
@@ -89,20 +83,21 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             let mut rng = rand::thread_rng();
             let mut ok: Vec<RistrettoShare> = vec![];
             ok.extend(&Wy_shares[0..2*threshold+1]);
-            ok.shuffle(&mut rng); 
-
-            let Wy = RistrettoPolynomial::interpolate(&ok);
-
-                // ..verification...
-                let slice_Wy = RistrettoPolynomial::interpolate(&ok[0..threshold+1]);
-                assert!(Wy == slice_Wy); // should not detect any attack
+            ok.shuffle(&mut rng);
 
             // confirm the expected result from the original shares
-            let PI = Wy - Yr;
-            assert!(y * Pc == PI);
-    }
+            let PI = RistrettoPolynomial::interpolate(&ok) - Yr;
+            assert!(original_PI == PI);
 
-    let avg = (total.as_micros() as f64) / (1000.0*RUNS as f64);
+                // ..verification... should not detect any attack
+                let Wy_x = RistrettoPolynomial::reconstruct(&ok[0..2*threshold+1]);
+                if threshold != Wy_x.degree() {
+                    println!("t={:?} p={:?}", threshold, Wy_x.degree());
+                }
+                assert!(threshold == Wy_x.degree());
+    }
+    
+    let avg = total.as_millis() / RUNS as u128;
     println!("   Avg. per run: {:?}ms", avg);
 }
 
@@ -153,7 +148,7 @@ fn master_key_stats(parties: usize, threshold: usize) {
 
     let run = Instant::now() - start;
     total += run;
-    println!("   Matrix setup (size={:?}Kb, time={:?}ms)", ((P_matrix[0][0].as_bytes().len() * parties * parties) as f64) / 1024.0, (run.as_micros() as f64) / 1000.0);
+    println!("   Matrix setup (size={:?}Kb, time={:?}ms)", ((P_matrix[0][0].as_bytes().len() * parties * parties) as f64) / 1024.0, run.as_millis());
     
     // (Step 1 & 2) commit to pre-defined polynomials and construct encrypted shares
     let start = Instant::now();
@@ -181,7 +176,7 @@ fn master_key_stats(parties: usize, threshold: usize) {
 
     let run = Instant::now() - start;
     total += run;
-    println!("   Commit and encrypt: {:?}ms", (run.as_micros() as f64) / 1000.0);
+    println!("   Commit and encrypt: {:?}ms", run.as_millis());
 
     // (Step 3) verify if shares are correct
     let start = Instant::now();
@@ -196,7 +191,7 @@ fn master_key_stats(parties: usize, threshold: usize) {
 
     let run = Instant::now() - start;
     total += run;
-    println!("   Share verification: {:?}ms", (run.as_micros() as f64) / 1000.0);
+    println!("   Share verification: {:?}ms", run.as_millis());
 
     // reconstruct master key
     let start = Instant::now();
@@ -218,7 +213,7 @@ fn master_key_stats(parties: usize, threshold: usize) {
     let y_res = Polynomial::interpolate(&y_j);
     assert!(y == y_res);
 
-    println!("   Total: {:?}ms", (total.as_micros() as f64) / 1000.0);
+    println!("   Total: {:?}ms", total.as_millis());
 }
 
 fn main() {
@@ -237,7 +232,7 @@ fn main() {
     let str_threshold = matches.value_of("threshold").unwrap();
 
     let threshold = str_threshold.parse::<usize>().unwrap();
-    let parties = 3 * threshold + 1;
+    let parties = 3*threshold + 1;
     println!("Setup: (t={}, 3t+1={})", threshold, parties);
 
     //master_key_stats(parties, threshold);
@@ -247,28 +242,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shamir::{l_i, Reconstruct};
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn poly_reconstruct() {
-        let threshold = 4;
-        let parties = 3*threshold + 1;
-
-        let s = rnd_scalar();
-
-        let poly = Polynomial::rnd(s, threshold);
-        let S_poly = &poly * G;
-
-        let shares = poly.shares(parties);
-        let S_shares = shares.iter().map(|s| s * G).collect::<Vec<_>>();
-
-        let r_poly = Polynomial::reconstruct(&shares);
-        assert!(poly == r_poly);
-
-        let S_r_poly = RistrettoPolynomial::reconstruct(&S_shares);
-        assert!(S_poly == S_r_poly);
-    }
 
     #[test]
     fn share_eq_attack() {
@@ -290,8 +263,8 @@ mod tests {
             //TODO: select a random pair and run for N times!
             //TODO: can I attack individual polynomials?
             
-            let l0 = l_i(&t_1, 0) - l_i(&n, 0);
-            let l1 = l_i(&t_1, 1) - l_i(&n, 1);
+            let l0 = Polynomial::l_i(&t_1, 0) - Polynomial::l_i(&n, 0);
+            let l1 = Polynomial::l_i(&t_1, 1) - Polynomial::l_i(&n, 1);
             
             // x0.l0 + x1.l1 = 0
             let x0 = rnd_scalar();
@@ -302,12 +275,12 @@ mod tests {
 
         let mut acc1 = Scalar::zero();
         for i in 0..threshold {
-            acc1 += shares[i].yi * (l_i(&t_1, i) - l_i(&n, i));
+            acc1 += shares[i].yi * (Polynomial::l_i(&t_1, i) - Polynomial::l_i(&n, i));
         }
 
-        let mut acc2 = - shares[threshold].yi * l_i(&t_1, threshold);
+        let mut acc2 = - shares[threshold].yi * Polynomial::l_i(&t_1, threshold);
         for i in threshold..shares.len() {
-            acc2 += shares[i].yi * l_i(&n, i);
+            acc2 += shares[i].yi * Polynomial::l_i(&n, i);
         }
 
         assert!(acc1 == acc2);
