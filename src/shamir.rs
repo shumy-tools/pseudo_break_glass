@@ -122,17 +122,6 @@ fn cut_tail<Z>(v: &mut Vec::<Z>, elm: Z) where Z: Eq {
     }
 }
 
-fn mul(a: Vec::<Scalar>, b: Vec::<Scalar>) -> Vec::<Scalar> {
-    let mut res = vec![Scalar::zero(); a.len() + b.len() - 1];
-    for i in 0..a.len() {
-        for j in 0..b.len() {
-            res[i + j] += a[i] * b[j];
-        }
-    }
-
-    res
-}
-
 fn short_mul(a: &mut Vec::<Scalar>, b: Scalar) {
     let mut prev = a[0];
     a[0] *= b;
@@ -144,34 +133,9 @@ fn short_mul(a: &mut Vec::<Scalar>, b: Scalar) {
     a.push(Scalar::one());
 }
 
-
-/* fn short_mul(a: &Vec::<Scalar>, b: Scalar) -> Vec::<Scalar> {
-    let mut res = vec![Scalar::zero(); a.len() + 1];
-
-    res[0] = a[0] * b;
-    for i in 1..a.len() {
-        res[i] = a[i - 1] + a[i] * b;
-    }
-    res[a.len()] = Scalar::one();
-
-    res
-} */
-
-fn short_div(res: &Vec::<Scalar>, b: Scalar) -> Vec::<Scalar> {
-    let mut a = vec![Scalar::zero(); res.len()];
-    
-    let b_inv = b.invert();
-    a[0] = res[0] * b_inv;
-    for i in 1..res.len() {
-        a[i] = (res[i] - a[i - 1]) * b_inv;
-    }
-
-    cut_tail(&mut a, Scalar::zero());
-    a
-}
-
 fn lx_num_bar(range: &[Scalar], i: usize) -> (Vec<Scalar>, Scalar) {
     let mut num = vec![Scalar::one()];
+
     let mut denum = Scalar::one();
     for j in 0..range.len() {
         if j != i {
@@ -179,9 +143,8 @@ fn lx_num_bar(range: &[Scalar], i: usize) -> (Vec<Scalar>, Scalar) {
             denum *= range[i] - range[j];
         }
     }
-    let barycentric = denum.invert();
 
-    (num, barycentric)
+    (num, denum.invert())
 }
 
 pub fn rnd_scalar() -> Scalar {
@@ -250,38 +213,6 @@ impl Polynomial {
         
         Polynomial { a: coefs }
     }
-
-/*     pub fn l_x(n: usize) -> Self {
-        assert!(n >= 1);
-
-        let mut num = vec![-Scalar::one(), Scalar::one()];
-        for i in 1..n {
-            short_mul(&mut num, -Scalar::from((i + 1) as u32));
-        }
-
-        Polynomial { a: num }
-    }
-
-    pub fn li_x(lx: &Polynomial, x: &[Scalar], i: usize) -> Self {
-        let mut num = short_div(&lx.a, -x[i]);
-        for j in 1..lx.a.len() {
-            let js = Scalar::from(j as u32);
-            if !x.contains(&js) {
-                num = short_div(&num, -js);
-            }
-        }
-
-
-        let mut denum = Scalar::one();
-        for j in 0..x.len() {
-            if j != i {
-                denum *= x[i] - x[j];
-            }
-        }
-        let barycentric = denum.invert();
-        
-        Polynomial { a: num.into_iter().map(|v| v * barycentric).collect::<Vec<_>>() }
-    } */
 
     pub fn l_i(range: &[Scalar], i: usize) -> Scalar {
         let mut num = Scalar::one();
@@ -448,84 +379,10 @@ impl Degree for RistrettoPolynomial {
 mod tests {
     use super::*;
 
-    //use rand::prelude::*;
     use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-
+    
     const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
 
-/*     pub fn l_i_x(range: &[Scalar], i: usize) -> Vec<Scalar> {
-        let mut num = vec![Scalar::one()]; // by default is a polynomial with degree 0 of value 1.
-        let mut denum = Scalar::one();
-        for j in 0..range.len() {
-            if j != i {
-                short_mul(&mut num, -range[j]);
-                denum *= range[i] - range[j];
-            }
-        }
-
-        let denum_inv = denum.invert();
-        num.into_iter().map(|v| v * denum_inv).collect::<Vec<_>>()
-    } */
-
-    #[test]
-    fn test_short_mul_and_div() {
-        let v = vec![Scalar::from(105u32), Scalar::from(71u32), Scalar::from(15u32), Scalar::one()];
-        
-        let mut m_res = v.clone();
-        short_mul(&mut m_res, Scalar::from(7u32));
-        
-        let d_res = short_div(&m_res, Scalar::from(7u32));
-        
-        //println!("{:?}", m_res);
-        assert!(v == d_res);
-    }
-/*
-    #[test]
-    fn test_l_x() {
-        let threshold = 16;
-        let parties = 3*threshold + 1;
-
-        let s = rnd_scalar();
-        let poly = Polynomial::rnd(s, threshold);
-        let shares = poly.shares(parties);
-
-        let mut rng = rand::thread_rng();
-        let mut range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
-        range.shuffle(&mut rng);
-
-        let lx = Polynomial::l_x(parties);
-        for i in 0..range.len() {
-            let mut v1 = vec![Scalar::one()];
-            for j in 0..range.len() {
-                if j != i {
-                    short_mul(&mut v1, -range[j]);
-                }
-            }
-
-            let v2 = short_div(&lx.a, -range[i]);
-            assert!(v1 == v2);
-        }
-    } */
-
-/*     #[test]
-    fn test_l_i_x() {
-        let threshold = 16;
-        let parties = 3*threshold + 1;
-        let lx = Polynomial::l_x(parties);
-
-        let s = rnd_scalar();
-        let poly = Polynomial::rnd(s, threshold);
-        let shares = poly.shares(parties);
-
-        let mut rng = rand::thread_rng();
-        let mut range = shares.iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
-        range.shuffle(&mut rng);
-
-        //TODO: set a loop for i
-        let lix1 = l_i_x(&range[0..2*threshold + 1], 0);
-        let lix2 = Polynomial::li_x(&lx, &range[0..2*threshold + 1], 0);
-        assert!(lix1 == lix2.a);
-    } */
 
     #[allow(non_snake_case)]
     #[test]

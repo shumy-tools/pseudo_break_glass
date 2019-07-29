@@ -48,7 +48,26 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             let Yr = compressed_Yr.decompress().unwrap();
 
             // each party derives the partial pesudonym
-            let Wy_shares = y_shares.iter().map(|yi| yi * W).collect::<Vec<_>>();
+            let mut Wy_shares = y_shares.iter().map(|yi| yi * W).collect::<Vec<_>>();
+
+            // simulation of random responses
+            let mut rng = rand::thread_rng();
+            Wy_shares.shuffle(&mut rng);
+
+            // derive the correct Wy point
+            let PI = RistrettoPolynomial::interpolate(&Wy_shares[0..2*threshold+1]) - Yr;
+
+                // ..verification... should not detect any attack
+                let Wy_x = RistrettoPolynomial::reconstruct(&Wy_shares[0..2*threshold+1]);
+                assert!(threshold == Wy_x.degree());
+
+        let run = Instant::now() - start;
+        total += run;
+
+        // the next verification step is not contained in the total time because the process only runs one time.
+            
+            // confirm the expected result from the original shares
+            assert!(original_PI == PI);
 
             // ...attack with same degree polynomial...
             let fake_y = rnd_scalar();
@@ -68,33 +87,12 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             assert!(selected.len() == 2*threshold+1);
 
             // derive the fake_Wy point
-            let fake_PI = RistrettoPolynomial::interpolate(&selected) - Yr;
+            let fake_PI = RistrettoPolynomial::interpolate(&selected[0..2*threshold+1]) - Yr;
             assert!(original_PI != fake_PI);
 
                 // ..detect attack...
                 let fake_Wy_x = RistrettoPolynomial::reconstruct(&selected[0..2*threshold+1]);
                 assert!(threshold != fake_Wy_x.degree());
-
-        let run = Instant::now() - start;
-        total += run;
-
-        // the next verification step is not contained in the total time because the process only runs one time.
-            // derive the correct Wy point
-            let mut rng = rand::thread_rng();
-            let mut ok: Vec<RistrettoShare> = vec![];
-            ok.extend(&Wy_shares[0..2*threshold+1]);
-            ok.shuffle(&mut rng);
-
-            // confirm the expected result from the original shares
-            let PI = RistrettoPolynomial::interpolate(&ok) - Yr;
-            assert!(original_PI == PI);
-
-                // ..verification... should not detect any attack
-                let Wy_x = RistrettoPolynomial::reconstruct(&ok[0..2*threshold+1]);
-                if threshold != Wy_x.degree() {
-                    println!("t={:?} p={:?}", threshold, Wy_x.degree());
-                }
-                assert!(threshold == Wy_x.degree());
     }
     
     let avg = total.as_millis() / RUNS as u128;
@@ -235,7 +233,7 @@ fn main() {
     let parties = 3*threshold + 1;
     println!("Setup: (t={}, 3t+1={})", threshold, parties);
 
-    //master_key_stats(parties, threshold);
+    master_key_stats(parties, threshold);
     multiparty_stats(parties, threshold);
 }
 
@@ -259,10 +257,6 @@ mod tests {
         let t_1 = shares[0..threshold+1].iter().map(|s| Scalar::from(s.i)).collect::<Vec<_>>();
 
         //BEGIN attack on shares 0 and 1
-            
-            //TODO: select a random pair and run for N times!
-            //TODO: can I attack individual polynomials?
-            
             let l0 = Polynomial::l_i(&t_1, 0) - Polynomial::l_i(&n, 0);
             let l1 = Polynomial::l_i(&t_1, 1) - Polynomial::l_i(&n, 1);
             
@@ -286,7 +280,7 @@ mod tests {
         assert!(acc1 == acc2);
         assert!(s != Polynomial::interpolate(&shares));
         
-        // detect attack
+        // detect attack!!
         let s1 = Polynomial::interpolate(&shares[0..2*threshold+1]);
         let s2 = Polynomial::interpolate(&shares[0..threshold+1]);
         assert!(s1 != s2);
