@@ -27,6 +27,7 @@ fn multiparty_stats(parties: usize, threshold: usize) {
     let y_shares = poly.shares(parties);
 
     let mut total = Duration::new(0, 0);
+    let mut overhead = Duration::new(0, 0);
     for _ in 0..RUNS {
         // derive Pc from a fragment of public information
         let public_x = rand::thread_rng().gen::<[u8; 32]>();
@@ -58,11 +59,14 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             let PI = RistrettoPolynomial::interpolate(&Wy_shares[0..2*threshold+1]) - Yr;
 
                 // ..verification... should not detect any attack
-                let Wy_x = RistrettoPolynomial::reconstruct(&Wy_shares[0..2*threshold+1]);
-                assert!(threshold == Wy_x.degree());
+                let o_start = Instant::now();
+                    let Wy_x = RistrettoPolynomial::reconstruct(&Wy_shares[0..2*threshold+1]);
+                    assert!(threshold == Wy_x.degree());
+                let o_run = Instant::now() - o_start;
 
         let run = Instant::now() - start;
         total += run;
+        overhead += o_run;
 
         // the next verification step is not contained in the total time because the process only runs one time.
             
@@ -95,8 +99,9 @@ fn multiparty_stats(parties: usize, threshold: usize) {
                 assert!(threshold != fake_Wy_x.degree());
     }
     
-    let avg = total.as_millis() / RUNS as u128;
-    println!("   Avg. per run: {:?}ms", avg);
+    let t_avg = total.as_millis() / RUNS as u128;
+    let o_avg = overhead.as_millis() / RUNS as u128;
+    println!("   Avg. per run: (total={:?}ms, verif={:?})", t_avg, o_avg);
 }
 
 #[allow(non_snake_case)]
