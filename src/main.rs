@@ -224,6 +224,12 @@ fn main() {
         .version("1.0")
         .author("Micael Pedrosa <micaelpedrosa@ua.pt>")
         .about("Simulations and measurements for the FedPI protocol.")
+        .arg(Arg::with_name("select")
+            .help("Selects the simulation process. (k) - master key setup, (m) - multiparty computation")
+            .required(true)
+            .short("s")
+            .long("select")
+            .takes_value(true))
         .arg(Arg::with_name("threshold")
             .help("Sets the threshold number (t). The number of parties are set automatically to 3t+1.")
             .required(true)
@@ -232,14 +238,19 @@ fn main() {
             .takes_value(true))
         .get_matches();
     
-    let str_threshold = matches.value_of("threshold").unwrap();
+    let select = matches.value_of("select").unwrap();
 
+    let str_threshold = matches.value_of("threshold").unwrap();
     let threshold = str_threshold.parse::<usize>().unwrap();
+    
     let parties = 3*threshold + 1;
     println!("Setup: (t={}, 3t+1={})", threshold, parties);
 
-    master_key_stats(parties, threshold);
-    multiparty_stats(parties, threshold);
+    match select {
+        "k" => master_key_stats(parties, threshold),
+        "m" => multiparty_stats(parties, threshold),
+        _ => println!("Invalid selector!")
+    }
 }
 
 #[cfg(test)]

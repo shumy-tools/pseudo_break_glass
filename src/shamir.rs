@@ -135,7 +135,6 @@ fn short_mul(a: &mut Vec::<Scalar>, b: Scalar) {
 
 fn lx_num_bar(range: &[Scalar], i: usize) -> (Vec<Scalar>, Scalar) {
     let mut num = vec![Scalar::one()];
-
     let mut denum = Scalar::one();
     for j in 0..range.len() {
         if j != i {
@@ -380,7 +379,7 @@ mod tests {
     use super::*;
 
     use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-    
+
     const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
 
 

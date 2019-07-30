@@ -24,25 +24,21 @@ Micael Pedrosa <micaelpedrosa@ua.pt>
 Simulations and measurements for the FedPI protocol.
 
 USAGE:
-    pseudo-id --threshold <threshold>
+    pseudo-id --select <select> --threshold <threshold>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
+    -s, --select <select>          Selects the simulation process. (k) - master key setup, (m) - multiparty computation
     -t, --threshold <threshold>    Sets the threshold number (t). The number of parties are set automatically to 3t+1.
 ```
 
-with the result output example:
+with an output example:
 
 ```
 Setup: (t=32, 3t+1=97)
----Master key setup stats---
-   Matrix setup (size=294.03125Kb, time=1181.195ms)
-   Commit and encrypt: 247.326ms
-   Share verification: 17810.898ms
-   Total: 19244.28ms
 ---Multiparty computation stats (500 runs)---
-   Avg. per run: 7.698006ms
+   Avg. per run: (total=255ms, verif=245)
 ```
