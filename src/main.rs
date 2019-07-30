@@ -101,7 +101,7 @@ fn multiparty_stats(parties: usize, threshold: usize) {
     
     let t_avg = total.as_millis() / RUNS as u128;
     let o_avg = overhead.as_millis() / RUNS as u128;
-    println!("   Avg. per run: (total={:?}ms, verif={:?})", t_avg, o_avg);
+    println!("   Avg. per run: (total={:?}ms, verif={:?}ms)", t_avg, o_avg);
 }
 
 #[allow(non_snake_case)]

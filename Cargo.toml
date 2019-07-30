@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["shumy <micaelpedrosa@gmail.com>"]
 edition = "2018"
 
+[profile.test]
+opt-level = 3
+
 [dependencies]
 curve25519-dalek = "^1"
 rand_os = "^0.1"
