@@ -1,5 +1,5 @@
 mod macros;
-mod shamir;
+mod crypto;
 
 use std::time::{Instant, Duration};
 
@@ -11,7 +11,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 
 use sha2::{Sha512, Digest};
 use rand::prelude::*;
-use shamir::*;
+use crypto::*;
 
 const RUNS: usize = 100;
 const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
@@ -20,6 +20,10 @@ const G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
 fn multiparty_stats(parties: usize, threshold: usize) {
     println!("---Multiparty computation stats ({:?} runs)---", RUNS);
 
+    // client key pair
+    let a = rnd_scalar();
+    let Pa = (a * G).compress();
+
     let y = rnd_scalar();
     let Y = y * G;
 
@@ -27,7 +31,8 @@ fn multiparty_stats(parties: usize, threshold: usize) {
     let y_shares = poly.shares(parties);
 
     let mut total = Duration::new(0, 0);
-    let mut overhead = Duration::new(0, 0);
+    let mut auth_verif = Duration::new(0, 0);
+    let mut share_verif = Duration::new(0, 0);
     for _ in 0..RUNS {
         // derive Pc from a fragment of public information
         let public_x = rand::thread_rng().gen::<[u8; 32]>();
@@ -39,9 +44,17 @@ fn multiparty_stats(parties: usize, threshold: usize) {
         let R = r * G;
         let compressed_W = (Pc + R).compress();
         let compressed_Yr = (r * Y).compress();
+
+        let data: Vec<Box<[u8]>> = vec![Box::new(compressed_W.to_bytes()), Box::new(compressed_Yr.to_bytes())];
+        let sig = Signature::sign(a, Pa, &data);
         
         // client to parties transmission <W,Yr>
         let start = Instant::now();
+            
+            // verification of message authenticity
+            let a_start = Instant::now();
+                assert!(sig.verify(Pa, &data) == true);
+            let a_run = Instant::now() - a_start;
 
             // Use CompressedRistretto::from_slice(..) to get a point from the input.
             // The CompressedRistretto::decompress() validates the point.
@@ -59,14 +72,15 @@ fn multiparty_stats(parties: usize, threshold: usize) {
             let PI = RistrettoPolynomial::interpolate(&Wy_shares[0..2*threshold+1]) - Yr;
 
                 // ..verification... should not detect any attack
-                let o_start = Instant::now();
+                let s_start = Instant::now();
                     let Wy_x = RistrettoPolynomial::reconstruct(&Wy_shares[0..2*threshold+1]);
                     assert!(threshold == Wy_x.degree());
-                let o_run = Instant::now() - o_start;
+                let s_run = Instant::now() - s_start;
 
         let run = Instant::now() - start;
+        auth_verif += a_run;
+        share_verif += s_run;
         total += run;
-        overhead += o_run;
 
         // the next verification step is not contained in the total time because the process only runs one time.
             
@@ -99,9 +113,10 @@ fn multiparty_stats(parties: usize, threshold: usize) {
                 assert!(threshold != fake_Wy_x.degree());
     }
     
+    let a_avg = auth_verif.as_millis() / RUNS as u128;
+    let s_avg = share_verif.as_millis() / RUNS as u128;
     let t_avg = total.as_millis() / RUNS as u128;
-    let o_avg = overhead.as_millis() / RUNS as u128;
-    println!("   Avg. per run: (total={:?}ms, verif={:?}ms)", t_avg, o_avg);
+    println!("   Avg. per run: (a_verif={:?}ms, s_verif={:?}ms, total={:?}ms)", a_avg, s_avg, t_avg);
 }
 
 #[allow(non_snake_case)]

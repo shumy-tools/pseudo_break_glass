@@ -35,10 +35,19 @@ OPTIONS:
     -t, --threshold <threshold>    Sets the threshold number (t). The number of parties are set automatically to 3t+1.
 ```
 
-with an output example:
+with output examples:
 
 ```
 Setup: (t=32, 3t+1=97)
----Multiparty computation stats (500 runs)---
-   Avg. per run: (total=255ms, verif=245)
+---Multiparty computation stats (100 runs)---
+   Avg. per run: (a_verif=0ms, s_verif=243ms, total=254ms)
+```
+
+```
+Setup: (t=32, 3t+1=97)
+---Master key setup stats---
+   Matrix setup (size=294.03125Kb, time=1124ms)
+   Commit and encrypt: 232ms
+   Share verification: 16602ms
+   Total: 17960ms
 ```
