@@ -1,8 +1,8 @@
-# pseudo_break_glass
-Pseudonym Identifier Derivation (P-ID) function with break-the-glass compatibility.
+# Title
+A pseudonymisation protocol with implicit and explicit consent routes for health records in federated ledgers
 
 ## Abstract
-Pseudonymisation is a major requirement in recent data protection regulations, and of especial importance when sharing healthcare data outside of the boundaries of the affinity domain. However, healthcare systems require important break-the-glass procedures, such as accessing records of patients in unconscious states. Our work presents a pseudonymisation protocol that is compliant with break-the-glass procedures, established on a (t,n)-threshold secret sharing scheme and public key cryptography. The pseudonym is safely derived from a fragment of public information without any private secret requirement. The protocol is proven secure and scalable under reasonable assumptions.
+Healthcare data for primary use (diagnosis) may be encrypted for confidentiality purposes; however, secondary uses such as feeding machine learning algorithms requires open access. Full anonymity has no traceable identifiers to report diagnosis results. Moreover, implicit and explicit consent routes are of practical importance under recent data protection regulations (GDPR), translating directly into break-the-glass requirements. Pseudonymisation is an acceptable compromise when dealing with such orthogonal requirements and is an advisable measure to protect data. Our work presents a pseudonymisation protocol that is compliant with implicit and explicit consent routes. The protocol is constructed on a (t,n)-threshold secret sharing scheme and public key cryptography. The pseudonym is safely derived from a fragment of public information without requiring any data-subject's secret. The method is proven secure under reasonable cryptographic assumptions and scalable from the experimental results.
 
 ## Dependencies
 * rustc 1.36.0
